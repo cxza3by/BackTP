@@ -11,7 +11,7 @@ namespace BackTP
     {
         public override string Name => "BackTP";
         public override string Author => "Ramiro Arena";
-        public override string Description => "guarda la posición anterior a un teleport y permite /back.";
+        public override string Description => "saves the position before a teleport and allows /back.";
         public override Version Version => new Version(1, 0, 0);
         private const double TeleportThresholdTiles = 120; 
         private static readonly TimeSpan BackCooldown = TimeSpan.FromSeconds(5);
@@ -24,11 +24,11 @@ namespace BackTP
         {
             Commands.ChatCommands.Add(new Command("backtp.use", CmdBack, "back"));
 
-            // loop para detectar saltos de posición
+            // loop to detect position jumps
             ServerApi.Hooks.GameUpdate.Register(this, OnGameUpdate);
             ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
 
-            TShock.Log.ConsoleInfo("[BackTP] cargado ");
+            TShock.Log.ConsoleInfo("[BackTP] loaded ");
         }
 
         protected override void Dispose(bool disposing)
@@ -62,7 +62,7 @@ namespace BackTP
                     continue;
                 }
 
-                // no guardar back si está muerto o no hay posición válida
+                // don't save back if dead or there is no valid position
                 if (p.Dead)
                 {
                     st.LastX = p.TileX;
@@ -74,15 +74,15 @@ namespace BackTP
                 var curX = p.TileX;
                 var curY = p.TileY;
 
-                // distancia en tiles desde el último tick
+                // distance in tiles since the last tick
                 int dx = curX - st.LastX;
                 int dy = curY - st.LastY;
                 double dist = Math.Sqrt(dx * dx + dy * dy);
 
-                // detecta salto grande (teleport probable)
+                // detects a large jump (probable teleport)
                 if (!st.WasDeadLastTick && dist >= TeleportThresholdTiles)
                 {
-                    // guardar posición anterior
+                    // save previous position
                     st.BackX = st.LastX;
                     st.BackY = st.LastY;
                     st.HasBack = true;
@@ -101,7 +101,7 @@ namespace BackTP
 
             if (!State.TryGetValue(p.Index, out var st) || !st.HasBack)
             {
-                p.SendErrorMessage("No tengo una ubicación anterior guardada (/back).");
+                p.SendErrorMessage("No previous location is saved (/back).");
                 return;
             }
 
@@ -109,19 +109,19 @@ namespace BackTP
             if (st.LastBackUseUtc != DateTime.MinValue && (now - st.LastBackUseUtc) < BackCooldown)
             {
                 var remain = BackCooldown - (now - st.LastBackUseUtc);
-                p.SendErrorMessage($"Esperá {Math.Ceiling(remain.TotalSeconds)}s para usar /back otra vez.");
+                p.SendErrorMessage($"Wait {Math.Ceiling(remain.TotalSeconds)}s to use /back again.");
                 return;
             }
 
-            // clamp dentro del mundo
+            // clamp within the world
             int x = Clamp(st.BackX, 0, Main.maxTilesX - 1);
             int y = Clamp(st.BackY, 0, Main.maxTilesY - 1);
 
-            // teleport usa píxeles
+            // teleport uses pixels
             p.Teleport(x * 16f, y * 16f);
             st.LastBackUseUtc = now;
 
-            p.SendSuccessMessage($" Volviste a tu posición anterior ({x}, {y}).");
+            p.SendSuccessMessage($" You returned to your previous position ({x}, {y}).");
         }
 
         private static int Clamp(int v, int min, int max)
