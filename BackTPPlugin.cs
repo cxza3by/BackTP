@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
+using TShockAPI.Configuration;
 
 namespace BackTP
 {
@@ -13,22 +15,70 @@ namespace BackTP
         public override string Author => "Ramiro Arena";
         public override string Description => "saves the position before a teleport and allows /back.";
         public override Version Version => new Version(1, 0, 0);
-        private const double TeleportThresholdTiles = 120; 
-        private static readonly TimeSpan BackCooldown = TimeSpan.FromSeconds(5);
+        private const double DefaultTeleportThresholdTiles = 120;
+        private const int DefaultBackCooldownSeconds = 5;
 
+        private static readonly ConfigFile<BackTPConfig> Config = new();
         private static readonly Dictionary<int, BackState> State = new();
+
+        private static string ConfigPath => Path.Combine(TShock.SavePath, "BackTP.json");
 
         public BackTPPlugin(Main game) : base(game) { }
 
         public override void Initialize()
         {
+            LoadConfig();
+
             Commands.ChatCommands.Add(new Command("backtp.use", CmdBack, "back"));
 
             // loop to detect position jumps
             ServerApi.Hooks.GameUpdate.Register(this, OnGameUpdate);
             ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
 
-            TShock.Log.ConsoleInfo("[BackTP] loaded ");
+            TShock.Log.ConsoleInfo($"[BackTP] loaded (config: {ConfigPath})");
+        }
+
+        private static void LoadConfig()
+        {
+            try
+            {
+                var settings = Config.Read(ConfigPath, out bool incompleteSettings);
+                if (settings == null)
+                {
+                    // No config file yet: write the defaults.
+                    Config.Settings = new BackTPConfig();
+                    Config.Write(ConfigPath);
+                    return;
+                }
+
+                bool changed = ValidateConfig(Config.Settings);
+                if (incompleteSettings || changed)
+                    Config.Write(ConfigPath);
+            }
+            catch (Exception ex)
+            {
+                Config.Settings = new BackTPConfig();
+                TShock.Log.ConsoleError($"[BackTP] could not read config '{ConfigPath}': {ex.Message}");
+            }
+        }
+
+        private static bool ValidateConfig(BackTPConfig settings)
+        {
+            bool changed = false;
+
+            if (settings.TeleportThresholdTiles <= 0)
+            {
+                settings.TeleportThresholdTiles = DefaultTeleportThresholdTiles;
+                changed = true;
+            }
+
+            if (settings.BackCooldownSeconds < 0)
+            {
+                settings.BackCooldownSeconds = DefaultBackCooldownSeconds;
+                changed = true;
+            }
+
+            return changed;
         }
 
         protected override void Dispose(bool disposing)
@@ -48,6 +98,8 @@ namespace BackTP
 
         private void OnGameUpdate(EventArgs args)
         {
+            double teleportThreshold = Config.Settings.TeleportThresholdTiles;
+
             foreach (var p in TShock.Players)
             {
                 if (p == null || !p.Active || p.TPlayer == null)
@@ -80,7 +132,7 @@ namespace BackTP
                 double dist = Math.Sqrt(dx * dx + dy * dy);
 
                 // detects a large jump (probable teleport)
-                if (!st.WasDeadLastTick && dist >= TeleportThresholdTiles)
+                if (!st.WasDeadLastTick && dist >= teleportThreshold)
                 {
                     // save previous position
                     st.BackX = st.LastX;
@@ -106,9 +158,10 @@ namespace BackTP
             }
 
             var now = DateTime.UtcNow;
-            if (st.LastBackUseUtc != DateTime.MinValue && (now - st.LastBackUseUtc) < BackCooldown)
+            var backCooldown = TimeSpan.FromSeconds(Config.Settings.BackCooldownSeconds);
+            if (st.LastBackUseUtc != DateTime.MinValue && (now - st.LastBackUseUtc) < backCooldown)
             {
-                var remain = BackCooldown - (now - st.LastBackUseUtc);
+                var remain = backCooldown - (now - st.LastBackUseUtc);
                 p.SendErrorMessage($"Wait {Math.Ceiling(remain.TotalSeconds)}s to use /back again.");
                 return;
             }

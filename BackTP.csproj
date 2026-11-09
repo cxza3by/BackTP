@@ -6,10 +6,13 @@
 		<RootNamespace>BackTP</RootNamespace>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>disable</ImplicitUsings>
+		<!-- Defaults to the oldest TShock release for Terraria 1.4.5.x.
+		     Override with: dotnet build -p:TShockVersion=6.2.1 -->
+		<TShockVersion Condition="'$(TShockVersion)' == ''">6.0.0</TShockVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="TShock" Version="6.1.0" />
+		<PackageReference Include="TShock" Version="$(TShockVersion)" />
 	</ItemGroup>
 
 </Project>
